@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { bookingsApi } from '../api/bookingsApi'
 import type { Booking } from '../domain/types'
+import { apiErrorMessage } from './errorMessages'
 
 type LoadState = {
   date: string
@@ -17,11 +18,17 @@ export function useBookings(date: string) {
 
   useEffect(() => {
     const controller = new AbortController()
-    void bookingsApi.list(date, controller.signal).then((bookings) => {
-      if (!controller.signal.aborted) setState({ date, revision, bookings, error: null })
-    }).catch(() => {
-      if (!controller.signal.aborted) setState({
-        date, revision, bookings: [], error: 'Не удалось загрузить расписание. Попробуйте ещё раз.',
+    // StrictMode disposes its first effect synchronously. Do not send that obsolete request.
+    queueMicrotask(() => {
+      if (controller.signal.aborted) return
+      void bookingsApi.list(date, controller.signal).then((bookings) => {
+        if (!controller.signal.aborted) setState({ date, revision, bookings, error: null })
+      }).catch((error: unknown) => {
+        if (!controller.signal.aborted) setState((previous) => ({
+          date, revision,
+          bookings: previous.date === date ? previous.bookings : [],
+          error: apiErrorMessage(error, 'load'),
+        }))
       })
     })
     return () => controller.abort()
@@ -32,6 +39,7 @@ export function useBookings(date: string) {
   return {
     bookings: state.date === date ? state.bookings : [],
     loading,
+    refreshing: loading && state.date === date,
     error: loading ? null : state.error,
     reload,
   }

@@ -20,12 +20,18 @@ export function createHandlers(store: BookingStore, {
   now = () => new Date(), scenario,
 }: { now?: () => Date; scenario?: string } = {}) {
   let conflictPending = scenario === 'conflict'
+  let loadErrorPending = scenario === 'load-error'
+  let saveErrorPending = scenario === 'save-error'
 
   return [
     http.get('*/api/bookings', ({ request }) => {
       const date = new URL(request.url).searchParams.get('date') ?? ''
       if (!isValidBookingDate(date)) {
         return error(422, 'VALIDATION_ERROR', [{ code: 'INVALID_DATE', field: 'date' }])
+      }
+      if (loadErrorPending) {
+        loadErrorPending = false
+        return error(503, 'SERVICE_UNAVAILABLE')
       }
       const bookings = store.getAll().filter((booking) => booking.date === date)
         .sort((a, b) => a.start.localeCompare(b.start))
@@ -38,6 +44,10 @@ export function createHandlers(store: BookingStore, {
       const errors = validateBooking(input, { bookings: store.getAll(), now: current })
       if (errors.length > 0) return validationError(errors)
 
+      if (saveErrorPending) {
+        saveErrorPending = false
+        return error(503, 'SERVICE_UNAVAILABLE')
+      }
       // No awaits between validation and write: concurrent requests cannot both win.
       if (conflictPending) {
         conflictPending = false
@@ -58,6 +68,10 @@ export function createHandlers(store: BookingStore, {
       if (!input) return error(422, 'INVALID_REQUEST')
       const errors = validateBooking(input, { bookings: store.getAll(), now: now(), original })
       if (errors.length > 0) return validationError(errors)
+      if (saveErrorPending) {
+        saveErrorPending = false
+        return error(503, 'SERVICE_UNAVAILABLE')
+      }
       const booking = { ...input, id: original.id }
       store.save(booking)
       return HttpResponse.json(booking)
@@ -71,6 +85,8 @@ export function createHandlers(store: BookingStore, {
     http.post('*/api/demo/reset', () => {
       store.reset()
       conflictPending = scenario === 'conflict'
+      loadErrorPending = scenario === 'load-error'
+      saveErrorPending = scenario === 'save-error'
       return new HttpResponse(null, { status: 204 })
     }),
   ]

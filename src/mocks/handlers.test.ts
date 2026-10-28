@@ -229,4 +229,24 @@ describe('HTTP handlers', () => {
     },
   )
 
+
+  it('fails the first valid GET in load-error mode and recovers on retry without changing data', async () => {
+    server.resetHandlers(...createHandlers(store, { now: clock, scenario: 'load-error' }))
+    const before = store.getAll()
+    expect((await list('invalid')).status).toBe(422)
+    expect((await list()).status).toBe(503)
+    expect((await list()).status).toBe(200)
+    expect(store.getAll()).toEqual(before)
+  })
+
+  it.each(['POST', 'PATCH'])('fails one valid %s in save-error mode without persisting it', async (method) => {
+    server.resetHandlers(...createHandlers(store, { now: clock, scenario: 'save-error' }))
+    const id = method === 'PATCH' ? 'demo-planning' : undefined
+    const body = method === 'PATCH' ? { title: 'Updated' } : input
+    const before = store.getAll()
+    expect((await send(method, body, id)).status).toBe(503)
+    expect(store.getAll()).toEqual(before)
+    expect((await send(method, body, id)).status).toBe(method === 'PATCH' ? 200 : 201)
+  })
+
 })

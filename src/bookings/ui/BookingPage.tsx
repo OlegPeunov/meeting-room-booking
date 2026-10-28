@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { bookingsApi } from '../api/bookingsApi'
+import { ApiError, bookingsApi } from '../api/bookingsApi'
 import { getLocalDateTime, isValidBookingDate, MIN_DURATION, minutesToTime, timeToMinutes } from '../domain/time'
 import type { Booking, BookingInput } from '../domain/types'
 import { validateBooking } from '../domain/validation'
@@ -8,6 +8,7 @@ import { DateToolbar } from './DateToolbar'
 import { DayTimeline } from './DayTimeline'
 import { formatDate } from './dateUtils'
 import { useBookings } from './useBookings'
+import { apiErrorMessage } from './errorMessages'
 
 type Editor = {
   key: number
@@ -23,9 +24,10 @@ export function BookingPage() {
   const [busy, setBusy] = useState<'save' | 'delete' | null>(null)
   const [requestError, setRequestError] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
+  const [missingBooking, setMissingBooking] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const activeDate = editor && isValidBookingDate(editor.draft.date) ? editor.draft.date : selectedDate
-  const { bookings, loading, error, reload } = useBookings(activeDate)
+  const { bookings, loading, refreshing, error, reload } = useBookings(activeDate)
   const current = getLocalDateTime(now)
   const original = editor?.original
   // Presentation only: actual editing permission is checked again by validateBooking and the API.
@@ -60,6 +62,7 @@ export function BookingPage() {
     const draft = { ...input, title: input.title ?? '' }
     setEditor((previous) => ({ key: (previous?.key ?? 0) + 1, original: booking, draft, initial: draft }))
     setRequestError(null)
+    setMissingBooking(false)
     setAnnouncement('')
   }
 
@@ -76,11 +79,12 @@ export function BookingPage() {
     if (busy || !canDiscard()) return
     setEditor(null)
     setRequestError(null)
+    setMissingBooking(false)
     focusSchedule()
   }
 
   async function save() {
-    if (!editor || busy || loading || error) return
+    if (!editor || busy || loading || error || missingBooking) return
     const currentNow = new Date()
     setNow(currentNow)
     if (validateBooking(editor.draft, { bookings, now: currentNow, original: editor.original }).length > 0) return
@@ -95,29 +99,49 @@ export function BookingPage() {
       setAnnouncement(editor.original ? 'Изменения сохранены.' : 'Встреча забронирована.')
       reload()
       focusSchedule()
-    } catch {
-      setRequestError('Не удалось сохранить бронирование. Попробуйте ещё раз.')
+    } catch (error: unknown) {
+      setNow(new Date())
+      setRequestError(apiErrorMessage(error, editor.original ? 'save' : 'create'))
+      const missingOriginal = error instanceof ApiError && error.status === 404 && editor.original !== undefined
+      if ((error instanceof ApiError && error.status === 409) || missingOriginal) {
+        if (missingOriginal) setMissingBooking(true)
+        reload()
+      }
     } finally {
       setBusy(null)
     }
+  }
+
+  function continueAsNew() {
+    if (!editor || busy) return
+    setEditor({ ...editor, original: undefined })
+    setMissingBooking(false)
+    setRequestError(null)
   }
 
   async function remove() {
     if (!original || busy) return
     setBusy('delete')
     setRequestError(null)
+    let message = 'Бронирование удалено.'
     try {
       await bookingsApi.remove(original.id)
-      setSelectedDate(original.date)
-      setEditor(null)
-      setAnnouncement('Бронирование удалено.')
-      reload()
-      focusSchedule()
-    } catch {
-      setRequestError('Не удалось удалить бронирование. Попробуйте ещё раз.')
+    } catch (error: unknown) {
+      if (error instanceof ApiError && error.status === 404) {
+        message = 'Встреча уже удалена. Расписание обновляется.'
+      } else {
+        setRequestError(apiErrorMessage(error, 'delete'))
+        return
+      }
     } finally {
       setBusy(null)
     }
+    setSelectedDate(original.date)
+    setEditor(null)
+    setMissingBooking(false)
+    setAnnouncement(message)
+    reload()
+    focusSchedule()
   }
 
   return (
@@ -148,21 +172,23 @@ export function BookingPage() {
             <span><i className="legend-booked" />Занято</span>
             <span><i className="legend-past" />Прошедшее</span>
           </div>
-          {loading && <p className="schedule-message" role="status">Загрузка расписания…</p>}
+          {loading && <p className="schedule-message" role="status">{refreshing ? 'Обновляем расписание…' : 'Загрузка расписания…'}</p>}
           {error && <div className="schedule-message error-box" role="alert">
             <p>{error}</p><button type="button" className="text-button" onClick={reload}>Повторить загрузку</button>
           </div>}
           {!loading && !error && bookings.length === 0 && <p className="empty-day">В этот день встреч пока нет.</p>}
           <DayTimeline date={activeDate} bookings={bookings} now={now}
             disabled={loading || error !== null || busy !== null}
+            unavailableText={loading ? 'Загрузка…' : error ? 'Нет актуальных данных' : undefined}
             selectedId={editor?.original?.id} selectedStart={editor && !editor.original ? editor.draft.start : undefined}
             onCreate={createAt} onEdit={editBooking} />
         </section>
         <aside className="editor-column" aria-label="Бронирование встречи">
           {editor ? <BookingForm key={editor.key} draft={editor.draft} original={editor.original}
             bookings={bookings} now={now} today={current.date} locked={locked} loading={loading}
-            unavailable={error !== null} busy={busy} errors={errors} requestError={requestError}
-            onChange={(draft) => { setEditor({ ...editor, draft }); setRequestError(null) }}
+            unavailable={error !== null} missing={missingBooking} busy={busy} errors={errors} requestError={requestError}
+            onChange={(draft) => { setEditor({ ...editor, draft }); if (!missingBooking) setRequestError(null) }}
+            onRetryLoad={reload} onContinueAsNew={continueAsNew}
             onSave={() => { void save() }} onDelete={() => { void remove() }} onCancel={cancel} />
           : <section className="panel form-placeholder" aria-labelledby="placeholder-heading">
             <div className="placeholder-mark" aria-hidden="true">+</div>

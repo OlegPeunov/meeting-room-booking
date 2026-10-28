@@ -79,4 +79,16 @@ describe('fetch API client', () => {
     await expect(api.remove(created.id)).resolves.toBeUndefined()
   })
 
+
+  it('filters malformed server validation details while keeping status and valid domain errors', async () => {
+    server.use(http.post('*/api/bookings', () => HttpResponse.json({
+      code: 'VALIDATION_ERROR',
+      errors: [null, 'bad', { code: 'UNKNOWN' }, { code: 'INVALID_TIME', field: 'title' },
+        { code: 'BOOKING_CONFLICT', bookingIds: [42] }, { code: 'START_IN_PAST' }],
+    }, { status: 422 })))
+    await expect(api.create(input)).rejects.toMatchObject({
+      status: 422, code: 'VALIDATION_ERROR', errors: [{ code: 'START_IN_PAST' }],
+    })
+  })
+
 })

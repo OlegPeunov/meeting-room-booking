@@ -8,6 +8,7 @@ type Props = {
   bookings: Booking[]
   now: Date
   disabled: boolean
+  unavailableText?: string
   selectedId?: string
   selectedStart?: string
   onCreate: (start: string) => void
@@ -17,10 +18,10 @@ type Props = {
 const slots = Array.from({ length: (WORKDAY_END - WORKDAY_START) / TIME_STEP },
   (_, index) => WORKDAY_START + index * TIME_STEP)
 
-export function DayTimeline({ date, bookings, now, disabled, selectedId, selectedStart, onCreate, onEdit }: Props) {
+export function DayTimeline({ date, bookings, now, disabled, unavailableText, selectedId, selectedStart, onCreate, onEdit }: Props) {
   const current = getLocalDateTime(now)
   return (
-    <div className="timeline" aria-label="Расписание с 09:00 до 18:00">
+    <div className="timeline" aria-disabled={disabled} aria-label="Расписание с 09:00 до 18:00">
       {slots.map((minutes, index) => {
         const start = minutesToTime(minutes)!
         const end = minutesToTime(minutes + TIME_STEP)!
@@ -39,9 +40,9 @@ export function DayTimeline({ date, bookings, now, disabled, selectedId, selecte
               {!covered && <button type="button"
                 className={'slot-button' + (selectedStart === start ? ' slot-selected' : '')}
                 disabled={disabled || !available}
-                aria-label={(past ? 'Прошедшее время ' : 'Забронировать ') + start + '–' + end}
+                aria-label={(unavailableText ? unavailableText + ' ' : past ? 'Прошедшее время ' : 'Забронировать ') + start + '–' + end}
                 onClick={() => onCreate(start)}>
-                <span>{past ? 'Прошедшее время' : 'Свободно'}</span>
+                <span>{unavailableText ?? (past ? 'Прошедшее время' : 'Свободно')}</span>
                 {!past && <span aria-hidden="true" className="slot-plus">+</span>}
               </button>}
             </div>

@@ -1,3 +1,4 @@
+import { isBookingValidationError } from './contracts'
 import type { Booking, BookingInput, BookingValidationError } from '../domain/types'
 
 export class ApiError extends Error {
@@ -23,7 +24,7 @@ export function createBookingsApi(baseUrl = '/api') {
       let errors: BookingValidationError[] = []
       if (typeof body === 'object' && body !== null) {
         if ('code' in body && typeof body.code === 'string') code = body.code
-        if ('errors' in body && Array.isArray(body.errors)) errors = body.errors
+        if ('errors' in body && Array.isArray(body.errors)) errors = body.errors.filter(isBookingValidationError)
       }
       throw new ApiError(response.status, code, errors)
     }

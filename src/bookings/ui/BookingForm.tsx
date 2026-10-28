@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { MAX_DURATION, MIN_DURATION, minutesToTime, TIME_STEP, timeToMinutes, WORKDAY_END, WORKDAY_START } from '../domain/time'
 import type { Booking, BookingInput, BookingValidationError } from '../domain/types'
 import { validateBooking } from '../domain/validation'
+import { validationMessages } from './errorMessages'
 
 type Props = {
   draft: BookingInput
@@ -13,6 +14,9 @@ type Props = {
   locked: boolean
   loading: boolean
   unavailable: boolean
+  missing: boolean
+  onRetryLoad: () => void
+  onContinueAsNew: () => void
   busy: 'save' | 'delete' | null
   errors: BookingValidationError[]
   requestError: string | null
@@ -22,31 +26,19 @@ type Props = {
   onCancel: () => void
 }
 
-const messages: Record<BookingValidationError['code'], string> = {
-  INVALID_DATE: 'Выберите корректную дату.',
-  INVALID_TIME: 'Укажите корректное время начала и окончания.',
-  OUTSIDE_WORKING_HOURS: 'Встреча должна проходить с 09:00 до 18:00.',
-  INVALID_TIME_STEP: 'Выбирайте время с шагом 30 минут.',
-  START_NOT_BEFORE_END: 'Начало должно быть раньше окончания.',
-  DURATION_TOO_SHORT: 'Минимальная длительность — 30 минут.',
-  DURATION_TOO_LONG: 'Максимальная длительность — 2 часа.',
-  START_IN_PAST: 'Время начала уже прошло. Выберите будущий интервал.',
-  STARTED_BOOKING_TIME_LOCKED: 'Встреча уже началась. Можно изменить только название.',
-  BOOKING_CONFLICT: 'Это время уже занято. Выберите другой интервал.',
-}
 const startTimes = Array.from({ length: (WORKDAY_END - WORKDAY_START) / TIME_STEP },
   (_, index) => minutesToTime(WORKDAY_START + index * TIME_STEP)!)
 const endTimes = Array.from({ length: startTimes.length },
   (_, index) => minutesToTime(WORKDAY_START + (index + 1) * TIME_STEP)!)
 
 export function BookingForm({ draft, original, bookings, now, today, locked, loading,
-  unavailable, busy, errors, requestError, onChange, onSave, onDelete, onCancel }: Props) {
+  unavailable, missing, onRetryLoad, onContinueAsNew, busy, errors, requestError, onChange, onSave, onDelete, onCancel }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const titleRef = useRef<HTMLInputElement>(null)
   const deleteRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLElement>(null)
   const context = { bookings, now, original }
-  const errorMessages = [...new Set(errors.map((error) => messages[error.code]))]
+  const errorMessages = validationMessages(errors).filter((message) => message !== requestError)
 
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true })
@@ -80,6 +72,11 @@ export function BookingForm({ draft, original, bookings, now, today, locked, loa
           onClick={onCancel}>×</button>
       </div>
       {locked && <p className="notice">Встреча уже началась или завершилась. Можно изменить название или удалить бронь.</p>}
+      {locked && original && (draft.date !== original.date || draft.start !== original.start || draft.end !== original.end)
+        && <button type="button" className="text-button recovery-action" disabled={busy !== null}
+          onClick={() => onChange({ ...draft, date: original.date, start: original.start, end: original.end })}>
+          Вернуть исходное время
+        </button>}
       <form noValidate onSubmit={submit} aria-busy={busy !== null}>
         <fieldset disabled={busy !== null} className="form-fields">
           <label htmlFor="booking-date">Дата встречи</label>
@@ -116,15 +113,24 @@ export function BookingForm({ draft, original, bookings, now, today, locked, loa
           {errorMessages.map((message) => <li key={message}>{message}</li>)}
         </ul>}
         {requestError && <p className="error-box" role="alert">{requestError}</p>}
+        {loading && <p className="field-hint form-load-status" role="status">Обновляем доступное время…</p>}
+        {unavailable && <div className="notice form-load-status">
+          <p>Перед сохранением загрузите актуальное расписание. Данные формы сохранены.</p>
+          <button type="button" className="text-button recovery-action" onClick={onRetryLoad}>Обновить расписание</button>
+        </div>}
         <div className="form-actions">
-          <button type="submit" className="button button-primary"
+          {missing ? <button type="button" className="button button-primary" disabled={busy !== null}
+            onClick={() => {
+              onContinueAsNew()
+              requestAnimationFrame(() => titleRef.current?.focus())
+            }}>Продолжить как новую встречу</button> : <button type="submit" className="button button-primary"
             disabled={busy !== null || loading || unavailable || errors.length > 0}>
             {busy === 'save' ? 'Сохранение…' : original ? 'Сохранить изменения' : 'Забронировать'}
-          </button>
+          </button>}
           <button type="button" className="button button-secondary" disabled={busy !== null} onClick={onCancel}>Отмена</button>
         </div>
       </form>
-      {original && <div className="delete-area">
+      {original && !missing && <div className="delete-area">
         {confirmDelete ? <div role="group" aria-label="Подтверждение удаления">
           <p className="delete-question">Удалить эту встречу?</p>
           <p className="field-hint">Бронирование будет удалено из расписания.</p>
