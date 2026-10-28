@@ -14,7 +14,8 @@ import { BookingPage } from './BookingPage'
 
 const server = setupServer()
 const TODAY = '2026-10-28'
-const NOW = new Date(2026, 9, 28, 8)
+// The regular tests freeze Date without advancing timers. Stay off an exact slot boundary.
+const NOW = new Date(2026, 9, 28, 8, 0, 1)
 let interceptedFetch: typeof fetch
 let store: ReturnType<typeof createBookingStore>
 
@@ -374,5 +375,65 @@ describe('booking page integration through fetch and MSW', () => {
     await user.click(screen.getByRole('button', { name: 'Сохранить изменения' }))
     expect(await screen.findByText('Изменения сохранены.')).toBeVisible()
     expect(store.getAll()).toContainEqual(expect.objectContaining({ id: 'editable', title: 'Title survives', start: '09:00' }))
+  })
+
+  it('marks a slot as past as soon as its start time passes', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(new Date(2026, 9, 28, 8, 59, 59))
+    vi.spyOn(bookingsApi, 'list').mockResolvedValue([])
+    render(<StrictMode><BookingPage /></StrictMode>)
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: 'Забронировать 09:00–09:30' })).toBeEnabled()
+    await act(async () => { vi.advanceTimersByTime(2_000) })
+    expect(screen.getByRole('button', { name: 'Прошедшее время 09:00–09:30' })).toBeDisabled()
+  })
+
+  it('locks a booking as it starts and keeps title editing available after it ends', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(new Date(2026, 9, 28, 8, 59, 59))
+    const original = { id: 'boundary', date: TODAY, start: '09:00', end: '09:30', title: 'Boundary meeting' }
+    vi.spyOn(bookingsApi, 'list').mockResolvedValue([original])
+    render(<StrictMode><BookingPage /></StrictMode>)
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Редактировать: Boundary meeting, 09:00–09:30' }))
+    expect(screen.getByLabelText('Начало')).toBeEnabled()
+    await act(async () => { vi.advanceTimersByTime(2_000) })
+    expect(screen.getByLabelText('Начало')).toBeDisabled()
+    expect(screen.getByLabelText('Окончание')).toBeDisabled()
+    expect(screen.getByLabelText('Дата встречи')).toBeDisabled()
+    expect(screen.getByLabelText(/Название встречи/)).toBeEnabled()
+    await act(async () => { vi.advanceTimersByTime(30 * 60_000) })
+    expect(screen.getByText('09:00–09:30 · Завершена')).toBeVisible()
+    expect(screen.getByLabelText(/Название встречи/)).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled()
+  })
+
+  it('moves keyboard focus to the form error so retry stays within the form', async () => {
+    server.resetHandlers(...createHandlers(store, { scenario: 'save-error' }))
+    render(<StrictMode><BookingPage /></StrictMode>)
+    const user = await openDraft()
+    await user.click(screen.getByRole('button', { name: 'Забронировать' }))
+    expect(await screen.findByRole('alert')).toHaveFocus()
+    expectDraft()
+  })
+
+  it('allows title changes and deletion of a completed booking while locking its schedule', async () => {
+    seedEditable()
+    vi.setSystemTime(new Date(2026, 9, 28, 10, 5))
+    render(<StrictMode><BookingPage /></StrictMode>)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Редактировать: Existing, 09:00–10:00' }))
+    expect(screen.getByLabelText('Дата встречи')).toBeDisabled()
+    expect(screen.getByLabelText('Начало')).toBeDisabled()
+    expect(screen.getByLabelText('Окончание')).toBeDisabled()
+    await user.clear(screen.getByLabelText(/Название встречи/))
+    await user.type(screen.getByLabelText(/Название встречи/), 'Completed meeting')
+    await user.click(screen.getByRole('button', { name: 'Сохранить изменения' }))
+    await user.click(await screen.findByRole('button', { name: 'Редактировать: Completed meeting, 09:00–10:00' }))
+    expect(store.getAll().find((booking) => booking.id === 'editable')).toEqual(expect.objectContaining({ start: '09:00', end: '10:00', title: 'Completed meeting' }))
+    await user.click(screen.getByRole('button', { name: 'Удалить бронь' }))
+    await user.click(screen.getByRole('button', { name: 'Подтвердить удаление' }))
+    expect(await screen.findByText('Бронирование удалено.')).toBeVisible()
+    expect(store.getAll().find((booking) => booking.id === 'editable')).toBeUndefined()
   })
 })

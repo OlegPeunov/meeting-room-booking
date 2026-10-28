@@ -35,6 +35,7 @@ export function BookingForm({ draft, original, bookings, now, today, locked, loa
   unavailable, missing, onRetryLoad, onContinueAsNew, busy, errors, requestError, onChange, onSave, onDelete, onCancel }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const titleRef = useRef<HTMLInputElement>(null)
+  const errorRef = useRef<HTMLParagraphElement>(null)
   const deleteRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLElement>(null)
   const context = { bookings, now, original }
@@ -46,6 +47,10 @@ export function BookingForm({ draft, original, bookings, now, today, locked, loa
       panelRef.current?.scrollIntoView({ block: 'start' })
     }
   }, [])
+
+  useEffect(() => {
+    if (requestError) errorRef.current?.focus()
+  }, [requestError])
 
   function changeStart(start: string) {
     const minutes = timeToMinutes(start)!
@@ -112,7 +117,7 @@ export function BookingForm({ draft, original, bookings, now, today, locked, loa
         {errorMessages.length > 0 && <ul className="error-box" id="booking-errors" aria-live="polite">
           {errorMessages.map((message) => <li key={message}>{message}</li>)}
         </ul>}
-        {requestError && <p className="error-box" role="alert">{requestError}</p>}
+        {requestError && <p ref={errorRef} className="error-box" role="alert" tabIndex={-1}>{requestError}</p>}
         {loading && <p className="field-hint form-load-status" role="status">Обновляем доступное время…</p>}
         {unavailable && <div className="notice form-load-status">
           <p>Перед сохранением загрузите актуальное расписание. Данные формы сохранены.</p>

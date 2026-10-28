@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, bookingsApi } from '../api/bookingsApi'
-import { getLocalDateTime, isValidBookingDate, MIN_DURATION, minutesToTime, timeToMinutes } from '../domain/time'
+import { getLocalDateTime, isValidBookingDate, MIN_DURATION, minutesToTime, TIME_STEP, timeToMinutes } from '../domain/time'
 import type { Booking, BookingInput } from '../domain/types'
 import { validateBooking } from '../domain/validation'
 import { BookingForm } from './BookingForm'
@@ -37,12 +37,25 @@ export function BookingPage() {
     ? validateBooking(editor.draft, { bookings, now, original }) : []
 
   useEffect(() => {
-    const updateClock = () => setNow(new Date())
-    const timer = window.setInterval(updateClock, 15_000)
+    let timer = 0
+    function scheduleNextBoundary() {
+      const current = new Date()
+      const elapsed = (current.getMinutes() % TIME_STEP) * 60_000
+        + current.getSeconds() * 1_000 + current.getMilliseconds()
+      // At the exact start creation is allowed; one millisecond later the slot is past.
+      const delay = elapsed === 0 ? 1 : TIME_STEP * 60_000 - elapsed + 1
+      timer = window.setTimeout(updateClock, delay)
+    }
+    function updateClock() {
+      window.clearTimeout(timer)
+      setNow(new Date())
+      scheduleNextBoundary()
+    }
+    scheduleNextBoundary()
     window.addEventListener('focus', updateClock)
     document.addEventListener('visibilitychange', updateClock)
     return () => {
-      window.clearInterval(timer)
+      window.clearTimeout(timer)
       window.removeEventListener('focus', updateClock)
       document.removeEventListener('visibilitychange', updateClock)
     }
