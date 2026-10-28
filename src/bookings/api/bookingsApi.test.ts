@@ -69,4 +69,14 @@ describe('fetch API client', () => {
     }))
     expect((await api.update('room/1', { title: 'X' })).id).toBe('room/1')
   })
+
+  it('sends the complete editor payload when changing an existing booking time', async () => {
+    const initial = { date: '2026-10-29', start: '10:00', end: '11:00', title: 'Original' }
+    const created = await api.create(initial)
+    const changed = { ...initial, start: '14:00', end: '15:00', title: 'Changed' }
+    expect(await api.update(created.id, changed)).toEqual({ ...changed, id: created.id })
+    expect(await api.list(initial.date)).toContainEqual({ ...changed, id: created.id })
+    await expect(api.remove(created.id)).resolves.toBeUndefined()
+  })
+
 })

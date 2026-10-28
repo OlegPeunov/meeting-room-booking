@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { setupServer } from 'msw/node'
 import type { Booking, BookingInput } from '../bookings/domain/types'
 import { createHandlers } from './handlers'
-import { createBookingStore } from './store'
+import { createBookingStore, STORAGE_KEY } from './store'
 
 const server = setupServer()
 const endpoint = 'http://localhost/api/bookings'
@@ -183,4 +183,50 @@ describe('HTTP handlers', () => {
     server.resetHandlers(...createHandlers(store, { now: clock }))
     expect(await (await list()).json()).toEqual(before)
   })
+
+  it.each(['http://localhost:5173', 'http://127.0.0.1:5173'])(
+    'updates and deletes a persisted generated-ID booking at %s', async (origin) => {
+      const values = new Map<string, string>()
+      const storage = {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => { values.set(key, value) },
+      }
+      const install = () => {
+        store = createBookingStore({ storage, now: clock })
+        server.resetHandlers(...createHandlers(store, { now: clock }))
+      }
+      const url = origin + '/api/bookings'
+      const body = { date: '2026-10-29', start: '10:00', end: '11:00', title: 'Before reload' }
+      install()
+      const createdResponse = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      expect(createdResponse.status).toBe(201)
+      const created: Booking = await createdResponse.json()
+      const originalRows = store.getAll().filter((row) => row.id !== created.id)
+      // A page reload reconstructs the mock store from the same sessionStorage data.
+      install()
+      const changed = { ...body, start: '14:00', end: '15:00', title: 'After reload' }
+      const updated = await fetch(url + '/' + encodeURIComponent(created.id), {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changed),
+      })
+      expect(updated.status).toBe(200)
+      expect(await updated.json()).toEqual({ ...changed, id: created.id })
+      install()
+      expect(store.getAll()).toContainEqual({ ...changed, id: created.id })
+      const beforeConflict = storage.getItem(STORAGE_KEY)
+      const conflict = await fetch(url + '/' + created.id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...changed, start: '11:00', end: '12:00' }),
+      })
+      expect(conflict.status).toBe(409)
+      expect(storage.getItem(STORAGE_KEY)).toBe(beforeConflict)
+      const deleted = await fetch(url + '/' + created.id, { method: 'DELETE' })
+      expect(deleted.status).toBe(204)
+      expect(await deleted.text()).toBe('')
+      install()
+      expect(store.getAll()).toEqual(originalRows)
+    },
+  )
+
 })
