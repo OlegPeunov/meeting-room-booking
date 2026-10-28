@@ -1,127 +1,105 @@
 # Meeting Room Booking
 
-Тестовое задание Mad Devs: интерфейс бронирования переговорной комнаты.
+A single-room booking demo for the Mad Devs frontend assignment: browse a day, create meetings, move them, rename them, and delete them. The interface is in Russian.
 
-## Запуск
+- **Deployed demo:** TODO: add the published demo URL.
+- **Actual time spent:** TODO: enter the actual development time.
+- **AI conversation:** TODO: add the conversation link or exported materials.
 
-Для разработки и тестов используется Node.js 24.21.0 из `.nvmrc`.
-Допустимые версии Node.js указаны в `engines` файла `package.json` с учётом требований jsdom.
-Если установлен nvm, выполните `nvm use` в папке проекта.
+## Stack
+
+React, TypeScript (strict), Vite, plain CSS, and MSW. Tests use Vitest and React Testing Library with jsdom. React manages state; there is no backend or UI framework.
+
+## Run locally
+
+Use Node.js **24.21.0**, as specified in `.nvmrc`, and its bundled npm. With nvm installed:
 
 ```sh
-npm install
+git clone https://github.com/OlegPeunov/meeting-room-booking.git
+cd meeting-room-booking
+nvm install
+nvm use
+npm ci
+cp .env.example .env.local
 npm run dev
 ```
 
-Адрес dev-сервера выводится в терминале (по умолчанию http://localhost:5173).
+Open the address printed by Vite (usually `http://localhost:5173`). Without nvm, install Node.js 24.21.0 before running the remaining commands.
 
-## Команды
+The public `VITE_ENABLE_MOCKS=true` flag enables the demo API. `.env.local` is ignored by Git and applies to dev and production builds. No secrets or other local files are required. Restart Vite or rebuild after changing the flag. Setting it to `false` requires a real API.
 
-- `npm run dev` — запуск dev-сервера.
-- `npm run typecheck` — проверка TypeScript без сборки приложения.
-- `npm run lint` — ESLint; предупреждения считаются ошибками.
-- `npm run test:domain` — однократный запуск unit-тестов доменной логики.
-- `npm run test:api` — тесты fetch-клиента, обработчиков MSW и хранилища.
-- `npm run test:ui` — интеграционные тесты интерфейса в jsdom через fetch и MSW.
-- `npm run build` — проверка типов и production-сборка.
-- `npm run preview` — локальный просмотр готовой production-сборки.
+## Checks and production preview
 
-## Текущий этап
-
-Подготовлена основа Vite + React + TypeScript: strict-режим, ESLint,
-минимальная стартовая страница и адаптивные CSS-стили.
-
-Добавлен независимый от React домен `src/bookings/domain`: типы бронирований,
-работа с локальными датами и временем, бизнес-валидация и unit-тесты Vitest.
-Валидация получает текущее время явно и возвращает коды ошибок без текстов UI.
-
-Добавлены fetch API-клиент, browser MSW и mock-хранилище с sessionStorage.
-Добавлен интерфейс бронирований: выбор даты, вертикальный таймлайн, создание,
-редактирование и удаление встреч. Обработаны загрузка, пустое расписание, сетевые ошибки,
-5xx, 422, исчезновение записи и конфликты 409. После конфликта список обновляется,
-черновик остаётся в форме; повторная отправка выполняется только пользователем.
-
-## Mock API
-
-MSW включён явно через `VITE_ENABLE_MOCKS=true` в отслеживаемом файле `.env`.
-Флаг действует в dev и production, включая будущий деплой Vite на Vercel.
-Перед рендером приложения ожидается `worker.start()`.
-Worker находится в `public/mockServiceWorker.js`; его нужно публиковать вместе с приложением.
-Для размещения требуется HTTPS (localhost допускает HTTP). Production-сборка пока не проверялась.
-При переходе на реальный API установите `VITE_ENABLE_MOCKS=false`.
-
-- `GET /api/bookings?date=YYYY-MM-DD` → 200, список дня по времени начала.
-- `POST /api/bookings` → 201, созданная бронь.
-- `PATCH /api/bookings/:id` → 200, обновлённая бронь; принимает частичные изменения.
-- `DELETE /api/bookings/:id` → 204 без тела.
-- Ошибки: 404 — запись отсутствует; 409 — пересечение; 422 — неверный запрос или бизнес-правила.
-- Тело ошибки: `{ code, errors? }`, где `errors` — коды доменной валидации.
-
-Mock проверяет текущие данные и время самостоятельно. При PATCH исходная запись берётся
-из хранилища, а не из запроса. Название начавшейся или завершённой брони менять можно.
-
-### Данные и сброс
-
-Хранилище использует ключ `meeting-room-booking:bookings:v1` в sessionStorage.
-Изменения переживают перезагрузку текущей вкладки. Разные вкладки не синхронизируются.
-Начальные данные создаются на завтра (10:00–11:00, 14:00–15:00) и послезавтра (11:00–12:00)
-по местному времени браузера при первом запуске или сбросе. При перезагрузке сохранённые даты
-не сдвигаются: старые брони остаются историей. Пустой сохранённый список тоже сохраняется.
-Некорректные данные восстанавливаются из демонабора; недоступный storage даёт fallback
-в память с предупреждением в консоли, без гарантии сохранения после перезагрузки.
-
-Сбросить демоданные можно в DevTools Console на странице приложения:
-
-```js
-await fetch('/api/demo/reset', { method: 'POST' }) // 204
+```sh
+npm test
+npm run typecheck
+npm run lint
+npm run build
+npm run preview
 ```
 
-### Воспроизводимый 409
+Preview serves `dist`, usually at `http://localhost:4173`; rebuild after changes. Individual suites: `npm run test:domain`, `npm run test:api`, and `npm run test:ui`.
 
-Откройте `/?scenario=conflict`. Первая валидная попытка POST в свободное время
-создаёт конкурирующую встречу с тем же интервалом и возвращает 409.
-Следующий GET показывает конкурента. Невалидные запросы и уже занятые интервалы
-не расходуют сценарий. В этой загрузке страницы следующий свободный интервал сохраняется обычно.
-Перезагрузка страницы или сброс демоданных снова включает сценарий.
+Tests cover time rules, editing restrictions, API statuses, persistence, CRUD, conflict recovery, stale responses, duplicate submissions, focus, and worker notification acknowledgements. Responsive layout and service workers also require browser checks.
 
-Проверка через интерфейс: выберите свободный будущий интервал, заполните название и
-нажмите «Забронировать». После 409 проверьте, что конкурент появился в расписании,
-а дата, начало, окончание и название остались в форме. Выберите другое свободное время
-и повторите сохранение вручную. Автоматической повторной отправки нет.
+## Architecture
 
-Для проверки на уровне запросов можно использовать DevTools Console:
+- `src/bookings/domain`: React-independent types, local date/time helpers, and validation. Times are compared as minutes since midnight; validation receives the current time explicitly and returns error codes.
+- `src/bookings/api`: fetch client and response/error contracts.
+- `src/mocks`: MSW handlers and their own store. Each write revalidates against current data and time; UI validation is never trusted.
+- `src/bookings/ui`: date navigation, vertical timeline, form, and request state. Components access data through the API client.
+
+Date changes cancel obsolete loads; stale results are ignored. Failed saves preserve the draft. A 409 refreshes the schedule without resubmitting. Saving is blocked if that refresh fails.
+
+## Product decisions
+
+- Local browser dates and timezone; working hours **09:00–18:00**.
+- A **30-minute selection step** keeps the timeline and editing simple. Duration is **30–120 minutes**, and start must precede end.
+- Meetings cannot overlap; touching endpoints are allowed. Editing excludes the current booking from overlap checks.
+- Creation in the past is blocked. Future meetings can move to another date or time.
+- Once a meeting starts, including after it ends, its schedule is locked. Its optional title can still change, and deletion remains available with confirmation.
+- On mobile, the form follows the schedule. Main actions support keyboard navigation.
+
+## Mock API and storage
+
+With the flag enabled, MSW starts **before React renders**, including in production. The committed `public/mockServiceWorker.js` is copied into `dist`; no generation step is needed after cloning. Browser startup acknowledges MSW 3.0.3’s service-worker notifications to avoid its [five-minute interception regression](https://github.com/mswjs/msw/issues/2801); the generated worker stays unchanged. Validate this workaround on a fresh origin when replacing an older build: already pending worker messages are not repaired retroactively.
+
+| Request | Success |
+| --- | --- |
+| `GET /api/bookings?date=YYYY-MM-DD` | 200, bookings sorted by start time |
+| `POST /api/bookings` | 201, created booking |
+| `PATCH /api/bookings/:id` | 200, updated booking; partial changes accepted |
+| `DELETE /api/bookings/:id` | 204 |
+
+Errors: 404 for missing bookings, 409 for overlap, 422 for invalid requests/rules. Booking: `{ id, date, start, end, title? }`, with `YYYY-MM-DD` dates and `HH:mm` times.
+
+Data uses `sessionStorage` key `meeting-room-booking:bookings:v1` and survives same-tab reloads. Tabs do not synchronize. New sessions seed meetings for tomorrow and the following day; persisted dates stay fixed. Unavailable storage falls back to memory without reliable reload persistence. Invalid stored data is reseeded.
+
+To reset demo data, run this in the browser console on the app page, then reload. This replaces bookings in that tab:
 
 ```js
-const day = new Date()
-day.setDate(day.getDate() + 1)
-const date = [day.getFullYear(), day.getMonth() + 1, day.getDate()]
-  .map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0')).join('-')
 await fetch('/api/demo/reset', { method: 'POST' })
-const response = await fetch('/api/bookings', {
-  method: 'POST', headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ date, start: '09:00', end: '09:30', title: 'My meeting' }),
-})
-console.log(response.status, await response.json()) // 409 при scenario=conflict
-console.log(await (await fetch('/api/bookings?date=' + date)).json())
+location.reload()
 ```
 
-Повторный POST в тот же интервал даёт обычный 409; для успешного POST выберите
-другой свободный интервал. При ошибке обновления расписания форма сохраняется,
-но повторное сохранение блокируется до успешной загрузки актуальных данных.
+## Reproduce errors
 
-### Однократные ошибки и восстановление
+These URLs work in dev, preview, and the hosted demo:
 
-- Откройте `/?scenario=load-error`: первый GET вернёт 503. Нажмите «Повторить загрузку».
-- Откройте `/?scenario=save-error`: первый валидный POST или PATCH вернёт 503 без изменения данных.
-  Повторите сохранение вручную: введённые значения остаются в форме.
-- Сценарии снова включаются после перезагрузки страницы; случайных ошибок нет.
-- При 422 UI показывает известные ошибки бизнес-правил; неверные детали error payload игнорируются.
-- При PATCH 404 можно явно продолжить с теми же полями как с новой встречей; это не отправляет POST автоматически.
-- DELETE 404 означает, что встреча уже удалена: UI закрывает форму и обновляет расписание.
-- Если запись сохранена, а следующий GET упал, отдельно показываются успех сохранения и ошибка загрузки.
-- При быстром переключении дат предыдущий запрос отменяется; устаревшие ответы и ошибки игнорируются.
-  Эффект, сразу отменённый StrictMode, не отправляет лишний GET.
+- `/?scenario=conflict`: the first valid POST to free future time creates a competing meeting and returns **409**. The refreshed timeline shows it while all draft fields remain. Choose another free interval and save manually.
+- `/?scenario=load-error`: the first valid schedule GET returns **503**. Use “Повторить загрузку” to retry.
+- `/?scenario=save-error`: the first valid POST or PATCH returns **503** without writing. Retry saving manually; the draft is preserved.
 
-Интеграционные тесты проверяют страницу, API-клиент и настоящие обработчики MSW вместе.
-jsdom используется только для этих тестов; доменные и API-тесты остаются в Node.
-Production-сборка и деплой на этом этапе не выполнялись.
+Scenarios run once per page load; reload/reset rearms them. Invalid or occupied writes do not consume the simulated save/conflict failure. Reload keeps bookings: choose a free interval.
+
+## Scope and limitations
+
+Implemented: date navigation, timeline, full CRUD, domain and server-side mock validation, loading/empty/error/submitting states, conflict recovery, responsive layout, and basic accessibility.
+
+This browser-local demo has no authentication, shared backend, multiple rooms, or cross-tab synchronization. It needs JavaScript, service workers, and HTTPS when hosted (HTTP works on localhost/127.0.0.1). Browser E2E automation and full screen-reader/cross-browser audits are not included. Forced browser suspension/worker termination is not covered; reload if mocking stops.
+
+With more time: connect a real backend, add browser E2E tests and broader accessibility checks, then improve multi-user synchronization if required.
+
+## Hosting preparation
+
+For Vercel: Vite preset, `npm run build`, output `dist`, [Node.js 24.x](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), and **`VITE_ENABLE_MOCKS=true` in the build environment**. Ignored local env files are not uploaded; [Vite embeds flags at build time](https://vite.dev/guide/env-and-mode). Serve `/mockServiceWorker.js` as JavaScript over HTTPS. Deployment and hosted smoke checks are the next stage.

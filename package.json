@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test:domain": "vitest run src/bookings/domain",
     "test:api": "vitest run src/bookings/api src/mocks",
-    "test:ui": "vitest run src/bookings/ui"
+    "test:ui": "vitest run src/bookings/ui",
+    "test": "vitest run"
   },
   "dependencies": {
     "msw": "^3.0.3",
