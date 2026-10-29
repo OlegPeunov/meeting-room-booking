@@ -2,9 +2,12 @@
 
 A single-room booking demo for the Mad Devs frontend assignment: browse a day, create meetings, move them, rename them, and delete them. The interface is in Russian.
 
-- **Deployed demo:** TODO: add the published demo URL.
-- **Actual time spent:** TODO: enter the actual development time.
-- **AI conversation:** TODO: add the conversation link or exported materials.
+- **Deployed demo:** [Open Meeting Room Booking](https://meeting-room-booking-alpha-jet.vercel.app/). No Vercel account is required.
+- **Repository:** [OlegPeunov/meeting-room-booking](https://github.com/OlegPeunov/meeting-room-booking).
+- **Actual time spent:** 4h.
+- **AI conversation export:** https://chatgpt.com/s/cx_6ae2b5280a888191908c0f90d8c0c62c
+
+These are the submission materials requested in the assignment. The repository is currently private; grant the reviewer access before submitting it.
 
 ## Stack
 
@@ -24,7 +27,9 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open the address printed by Vite (usually `http://localhost:5173`). Without nvm, install Node.js 24.21.0 before running the remaining commands.
+The clone command requires access to the private repository. Open the address printed by Vite (usually `http://localhost:5173`). Without nvm, install Node.js 24.21.0 before running the remaining commands.
+
+This setup was verified from a clean copy using the committed lockfile and `.env.example`; existing `node_modules`, local environment files, and global project tools are not required.
 
 The public `VITE_ENABLE_MOCKS=true` flag enables the demo API. `.env.local` is ignored by Git and applies to dev and production builds. No secrets or other local files are required. Restart Vite or rebuild after changing the flag. Setting it to `false` requires a real API.
 
@@ -84,22 +89,43 @@ location.reload()
 
 ## Reproduce errors
 
-These URLs work in dev, preview, and the hosted demo:
+The links below open the hosted demo. Append the same query parameters to the dev or preview URL to reproduce them locally:
 
-- `/?scenario=conflict`: the first valid POST to free future time creates a competing meeting and returns **409**. The refreshed timeline shows it while all draft fields remain. Choose another free interval and save manually.
-- `/?scenario=load-error`: the first valid schedule GET returns **503**. Use “Повторить загрузку” to retry.
-- `/?scenario=save-error`: the first valid POST or PATCH returns **503** without writing. Retry saving manually; the draft is preserved.
+- [`?scenario=conflict`](https://meeting-room-booking-alpha-jet.vercel.app/?scenario=conflict): the first valid POST to free future time creates a competing meeting and returns **409**. The refreshed timeline shows it while all draft fields remain. Choose another free interval and save manually.
+- [`?scenario=load-error`](https://meeting-room-booking-alpha-jet.vercel.app/?scenario=load-error): the first valid schedule GET returns **503**. Use “Повторить загрузку” to retry.
+- [`?scenario=save-error`](https://meeting-room-booking-alpha-jet.vercel.app/?scenario=save-error): the first valid POST or PATCH returns **503** without writing. Retry saving manually; the draft is preserved.
 
 Scenarios run once per page load; reload/reset rearms them. Invalid or occupied writes do not consume the simulated save/conflict failure. Reload keeps bookings: choose a free interval.
 
 ## Scope and limitations
 
-Implemented: date navigation, timeline, full CRUD, domain and server-side mock validation, loading/empty/error/submitting states, conflict recovery, responsive layout, and basic accessibility.
+Implemented: date navigation, timeline, full CRUD, domain and server-side mock validation, loading/empty/error/submitting states, conflict recovery, responsive layout, and basic accessibility. All required application features are implemented; the remaining submission placeholders are listed at the top.
 
 This browser-local demo has no authentication, shared backend, multiple rooms, or cross-tab synchronization. It needs JavaScript, service workers, and HTTPS when hosted (HTTP works on localhost/127.0.0.1). Browser E2E automation and full screen-reader/cross-browser audits are not included. Forced browser suspension/worker termination is not covered; reload if mocking stops.
 
 With more time: connect a real backend, add browser E2E tests and broader accessibility checks, then improve multi-user synchronization if required.
 
-## Hosting preparation
+## Deployment and verification
 
-For Vercel: Vite preset, `npm run build`, output `dist`, [Node.js 24.x](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), and **`VITE_ENABLE_MOCKS=true` in the build environment**. Ignored local env files are not uploaded; [Vite embeds flags at build time](https://vite.dev/guide/env-and-mode). Serve `/mockServiceWorker.js` as JavaScript over HTTPS. Deployment and hosted smoke checks are the next stage.
+The demo is deployed on Vercel from the repository root with these settings:
+
+| Setting | Value |
+| --- | --- |
+| Framework preset | Vite |
+| Install command | `npm ci` |
+| Build command | `node --version && npm run build` |
+| Output directory | `dist` |
+| Node.js | 24.x (24.22.1 in the verified deployment) |
+| Production environment | `VITE_ENABLE_MOCKS=true` |
+
+The flag must be set before building: Vite embeds it in the client bundle. Ignored local environment files are not needed on Vercel. The production domain is public; `/mockServiceWorker.js` is served as JavaScript over HTTPS.
+
+Verification completed before submission preparation:
+
+- Clean-copy setup, all 173 tests, typecheck, lint, production build, and local preview.
+- Public HTTPS access without authentication, MSW interception, CRUD, and persistence after reload.
+- Conflict recovery with all draft fields preserved and a successful manual retry; load/save error retries.
+- An open edit form left idle for more than eight minutes, followed by successful save, schedule refresh, delete, create, and reload checks.
+- Layout at 320 and 390 px without horizontal scrolling, plus basic keyboard interaction.
+
+These checks do not replace the broader browser and accessibility audits listed under limitations.
